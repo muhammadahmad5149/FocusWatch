@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ScreenGuardian</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Admin Dashboard</p>
+          <h1>ScreenGuardian</h1>
+        </div>
+        <div class="status-card">
+          <span id="serviceStatus" class="status status-unknown">Checking...</span>
+          <button id="refreshStatus" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Email Reporting</h2>
+          <label class="switch">
+            <input id="emailEnabled" type="checkbox" />
+            <span>Email upload enabled</span>
+          </label>
+        </div>
+
+        <div class="grid">
+          <label>
+            SMTP Host
+            <input id="smtpHost" type="text" placeholder="smtp.example.com" />
+          </label>
+          <label>
+            SMTP Port
+            <input id="smtpPort" type="number" min="1" max="65535" />
+          </label>
+          <label>
+            SMTP User
+            <input id="smtpUser" type="text" autocomplete="username" />
+          </label>
+          <label>
+            SMTP Password
+            <input id="smtpPass" type="password" autocomplete="current-password" />
+          </label>
+          <label>
+            From Address
+            <input id="emailFrom" type="email" placeholder="guardian@example.com" />
+          </label>
+          <label>
+            To Address
+            <input id="emailTo" type="email" placeholder="admin@example.com" />
+          </label>
+        </div>
+
+        <label class="switch compact">
+          <input id="smtpSecure" type="checkbox" />
+          <span>Use secure SMTP (TLS)</span>
+        </label>
+
+        <button id="saveSettings" type="button">Save Email Settings</button>
+      </section>
+
+      <section class="panel">
+        <h2>Admin Password</h2>
+        <p class="muted">
+          Used for exiting the tray application. Stopping or uninstalling the Windows service still requires Windows administrator rights.
+        </p>
+        <div class="inline-form">
+          <input id="adminPassword" type="password" placeholder="New admin password" />
+          <button id="setAdminPassword" type="button">Set Password</button>
+        </div>
+        <p id="passwordState" class="muted"></p>
+      </section>
+
+      <section class="panel actions">
+        <button id="openScreenshots" type="button">Open Screenshot Folder</button>
+        <button id="openLogs" type="button">Open Logs</button>
+        <button id="viewLogs" type="button">View Logs</button>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-heading">
+          <h2>Activity Log</h2>
+          <button id="clearLogView" type="button">Clear View</button>
+        </div>
+        <pre id="logOutput">Logs will appear here.</pre>
+      </section>
+    </main>
+
+    <dialog id="exitDialog">
+      <form method="dialog" class="dialog-form">
+        <h2>Admin Confirmation</h2>
+        <p>Enter the ScreenGuardian admin password to exit the dashboard tray app.</p>
+        <input id="exitPassword" type="password" placeholder="Admin password" />
+        <menu>
+          <button value="cancel" type="submit">Cancel</button>
+          <button id="confirmExit" value="confirm" type="button">Exit</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>
