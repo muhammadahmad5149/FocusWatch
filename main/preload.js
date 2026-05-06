@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('screenGuardian', {
+  getAdminState: () => ipcRenderer.invoke('admin:state'),
+  adminLogin: (password) => ipcRenderer.invoke('admin:login', password),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   setAdminPassword: (password) => ipcRenderer.invoke('admin:set-password', password),

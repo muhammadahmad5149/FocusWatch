@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { ensureDir } = require('./fileSystem');
 const { logEvent } = require('./logger');
+const { protectWindowsDataDirectory } = require('./permissions');
 const { getDataRoot, getLogsRoot, getProjectRoot } = require('./paths');
 const { SERVICE_NAME } = require('./serviceManager');
 
@@ -63,6 +64,7 @@ async function installWindowsService() {
 
   await ensureDir(serviceRoot);
   await ensureDir(getLogsRoot());
+  await protectWindowsDataDirectory(getDataRoot());
   await fs.copyFile(winswSource, serviceExe);
 
   const serviceArguments = process.versions.electron
@@ -77,6 +79,7 @@ async function installWindowsService() {
   <executable>${escapeXml(process.execPath)}</executable>
   <arguments>${escapeXml(serviceArguments)}</arguments>
   <workingdirectory>${escapeXml(getProjectRoot())}</workingdirectory>
+  <startmode>Automatic</startmode>
   <logpath>${escapeXml(getLogsRoot())}</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10485760</sizeThreshold>
@@ -90,6 +93,16 @@ async function installWindowsService() {
   await fs.writeFile(serviceXml, xml, 'utf8');
   await removeExistingService();
   await run(serviceExe, ['install']);
+  await run('sc.exe', ['config', SERVICE_NAME, 'start=', 'auto']);
+  await run('sc.exe', [
+    'failure',
+    SERVICE_NAME,
+    'reset=',
+    '86400',
+    'actions=',
+    'restart/10000/restart/30000/restart/60000'
+  ]);
+  await run('sc.exe', ['failureflag', SERVICE_NAME, '1']);
   await run(serviceExe, ['start']);
   await logEvent('Windows service installed with WinSW wrapper');
 

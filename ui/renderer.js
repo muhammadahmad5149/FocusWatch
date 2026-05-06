@@ -1,6 +1,12 @@
 const fields = {
   serviceStatus: document.getElementById('serviceStatus'),
   refreshStatus: document.getElementById('refreshStatus'),
+  adminLoginPanel: document.getElementById('adminLoginPanel'),
+  adminLoginHelp: document.getElementById('adminLoginHelp'),
+  adminLoginPassword: document.getElementById('adminLoginPassword'),
+  adminLoginButton: document.getElementById('adminLoginButton'),
+  adminLoginMessage: document.getElementById('adminLoginMessage'),
+  adminContent: document.getElementById('adminContent'),
   emailEnabled: document.getElementById('emailEnabled'),
   smtpHost: document.getElementById('smtpHost'),
   smtpPort: document.getElementById('smtpPort'),
@@ -16,6 +22,7 @@ const fields = {
   openScreenshots: document.getElementById('openScreenshots'),
   openLogs: document.getElementById('openLogs'),
   viewLogs: document.getElementById('viewLogs'),
+  exitApp: document.getElementById('exitApp'),
   clearLogView: document.getElementById('clearLogView'),
   logOutput: document.getElementById('logOutput'),
   exitDialog: document.getElementById('exitDialog'),
@@ -24,6 +31,7 @@ const fields = {
 };
 
 let currentSettings;
+let passwordConfigured = false;
 
 function setStatusText(message, type = 'unknown') {
   fields.serviceStatus.textContent = message;
@@ -32,6 +40,31 @@ function setStatusText(message, type = 'unknown') {
 
 function showMessage(message) {
   fields.logOutput.textContent = message;
+}
+
+function showAdminLoginMessage(message) {
+  fields.adminLoginMessage.textContent = message;
+}
+
+function setAdminContentVisible(isVisible) {
+  fields.adminContent.classList.toggle('hidden', !isVisible);
+  fields.adminLoginPanel.classList.toggle('hidden', isVisible);
+}
+
+function configureLoginPanel(state) {
+  passwordConfigured = Boolean(state.passwordConfigured);
+
+  if (passwordConfigured) {
+    fields.adminLoginHelp.textContent = 'Enter the ScreenGuardian admin password to manage settings and logs.';
+    fields.adminLoginPassword.placeholder = 'Admin password';
+    fields.adminLoginButton.textContent = 'Unlock Dashboard';
+  } else {
+    fields.adminLoginHelp.textContent = 'Create the first ScreenGuardian admin password to unlock protected controls.';
+    fields.adminLoginPassword.placeholder = 'New admin password';
+    fields.adminLoginButton.textContent = 'Create Admin Password';
+  }
+
+  setAdminContentVisible(Boolean(state.adminUnlocked));
 }
 
 function fillSettings(settings) {
@@ -76,17 +109,70 @@ async function refreshStatus() {
   setStatusText(status.status, type);
 }
 
-async function loadInitialState() {
-  const result = await window.screenGuardian.getSettings();
+async function loadProtectedState(existingSettings) {
+  const result = existingSettings
+    ? { settings: existingSettings, passwordConfigured }
+    : await window.screenGuardian.getSettings();
+
   fillSettings(result.settings);
   fields.passwordState.textContent = result.passwordConfigured
     ? 'Admin password is configured.'
-    : 'No admin password is configured. Set one before using the tray Exit action.';
+    : 'No admin password is configured.';
+  setAdminContentVisible(true);
+}
+
+async function handleAdminUnlock() {
+  const password = fields.adminLoginPassword.value;
+
+  try {
+    if (passwordConfigured) {
+      const result = await window.screenGuardian.adminLogin(password);
+
+      if (!result.ok) {
+        showAdminLoginMessage(result.message);
+        return;
+      }
+
+      passwordConfigured = result.passwordConfigured;
+      fields.adminLoginPassword.value = '';
+      showAdminLoginMessage('');
+      await loadProtectedState(result.settings);
+      return;
+    }
+
+    await window.screenGuardian.setAdminPassword(password);
+    fields.adminLoginPassword.value = '';
+    showAdminLoginMessage('');
+    passwordConfigured = true;
+    await loadProtectedState();
+  } catch (error) {
+    showAdminLoginMessage(error.message);
+  }
+}
+
+async function loadInitialState() {
+  const state = await window.screenGuardian.getAdminState();
+  configureLoginPanel(state);
+
+  if (state.adminUnlocked) {
+    await loadProtectedState();
+  }
+
   await refreshStatus();
 }
 
 fields.refreshStatus.addEventListener('click', () => {
   refreshStatus().catch((error) => showMessage(error.message));
+});
+
+fields.adminLoginButton.addEventListener('click', () => {
+  handleAdminUnlock().catch((error) => showAdminLoginMessage(error.message));
+});
+
+fields.adminLoginPassword.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    handleAdminUnlock().catch((error) => showAdminLoginMessage(error.message));
+  }
 });
 
 fields.saveSettings.addEventListener('click', async () => {
@@ -124,6 +210,11 @@ fields.viewLogs.addEventListener('click', async () => {
   } catch (error) {
     showMessage(`Failed to read logs: ${error.message}`);
   }
+});
+
+fields.exitApp.addEventListener('click', () => {
+  fields.exitPassword.value = '';
+  fields.exitDialog.showModal();
 });
 
 fields.clearLogView.addEventListener('click', () => {

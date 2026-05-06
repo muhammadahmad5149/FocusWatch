@@ -13,13 +13,36 @@ let mainWindow;
 let tray;
 let isQuitting = false;
 const userSessionScheduler = new Scheduler();
+let adminUnlocked = false;
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+function assertAdminUnlocked() {
+  if (!adminUnlocked) {
+    throw new Error('Admin authentication is required.');
+  }
+}
 
 function createMainWindow() {
+  const startInBackground = process.argv.includes('--background');
+
   mainWindow = new BrowserWindow({
     width: 900,
     height: 680,
     minWidth: 760,
     minHeight: 560,
+    show: !startInBackground,
     title: 'ScreenGuardian',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -38,30 +61,61 @@ function createMainWindow() {
   });
 }
 
+function configureLoginStartup() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  const loginSettings = app.isPackaged
+    ? {
+        openAtLogin: true,
+        path: process.execPath,
+        args: ['--background']
+      }
+    : {
+        openAtLogin: true,
+        path: process.execPath,
+        args: [getProjectRoot(), '--background']
+      };
+
+  app.setLoginItemSettings(loginSettings);
+}
+
+function updateTrayMenu() {
+  if (!tray || !mainWindow) {
+    return;
+  }
+
+  const template = [
+    {
+      label: adminUnlocked ? 'Open Admin Dashboard' : 'Open ScreenGuardian Status',
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  ];
+
+  if (adminUnlocked) {
+    template.push({
+      label: 'Exit ScreenGuardian',
+      click: () => {
+        mainWindow.show();
+        mainWindow.webContents.send('request-admin-exit');
+      }
+    });
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate(template));
+}
+
 function createTray() {
   const icon = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVR42mNkYGD4z0AEYBxVSFUBCjAqBqMGjIqhGoxwGgYGhv+QpIYpCpgYtBoAAGDfBBEfXq7fAAAAAElFTkSuQmCC'
   );
   tray = new Tray(icon);
   tray.setToolTip('ScreenGuardian');
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: 'Open Dashboard',
-        click: () => {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      },
-      {
-        label: 'Exit',
-        click: () => {
-          mainWindow.show();
-          mainWindow.webContents.send('request-admin-exit');
-        }
-      }
-    ])
-  );
+  updateTrayMenu();
 }
 
 async function confirmAndExit(password) {
@@ -82,7 +136,35 @@ async function confirmAndExit(password) {
   };
 }
 
+ipcMain.handle('admin:login', async (_event, password) => {
+  const ok = await verifyAdminPassword(password);
+
+  if (!ok) {
+    return {
+      ok: false,
+      message: 'Admin authentication failed.'
+    };
+  }
+
+  adminUnlocked = true;
+  updateTrayMenu();
+
+  return {
+    ok: true,
+    settings: await loadSettings(),
+    passwordConfigured: await hasAdminPassword()
+  };
+});
+
+ipcMain.handle('admin:state', async () => {
+  return {
+    adminUnlocked,
+    passwordConfigured: await hasAdminPassword()
+  };
+});
+
 ipcMain.handle('settings:get', async () => {
+  assertAdminUnlocked();
   const settings = await loadSettings();
   const passwordConfigured = await hasAdminPassword();
 
@@ -93,11 +175,19 @@ ipcMain.handle('settings:get', async () => {
 });
 
 ipcMain.handle('settings:save', async (_event, nextSettings) => {
+  assertAdminUnlocked();
   return saveSettings(nextSettings);
 });
 
 ipcMain.handle('admin:set-password', async (_event, password) => {
+  if (!adminUnlocked && (await hasAdminPassword())) {
+    throw new Error('Admin authentication is required.');
+  }
+
   await setAdminPassword(password);
+  adminUnlocked = true;
+  updateTrayMenu();
+
   return { ok: true };
 });
 
@@ -110,11 +200,13 @@ ipcMain.handle('service:status', async () => {
 });
 
 ipcMain.handle('folders:open-screenshots', async () => {
+  assertAdminUnlocked();
   await fs.mkdir(getScreenshotRoot(), { recursive: true });
   await shell.openPath(getScreenshotRoot());
 });
 
 ipcMain.handle('logs:read', async () => {
+  assertAdminUnlocked();
   try {
     return await fs.readFile(getActivityLogPath(), 'utf8');
   } catch (error) {
@@ -127,12 +219,15 @@ ipcMain.handle('logs:read', async () => {
 });
 
 ipcMain.handle('logs:open', async () => {
+  assertAdminUnlocked();
   await fs.mkdir(path.dirname(getActivityLogPath()), { recursive: true });
   await fs.appendFile(getActivityLogPath(), '', 'utf8');
   await shell.openPath(getActivityLogPath());
 });
 
 app.whenReady().then(() => {
+  configureLoginStartup();
+
   createMainWindow();
 
   try {

@@ -27,6 +27,14 @@ button:hover {
   background: #164fa6;
 }
 
+button.danger {
+  background: #b91c1c;
+}
+
+button.danger:hover {
+  background: #991b1b;
+}
+
 input {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -47,6 +55,15 @@ label {
   margin: 0 auto;
   max-width: 980px;
   padding: 28px;
+}
+
+.admin-content {
+  display: grid;
+  gap: 18px;
+}
+
+.hidden {
+  display: none;
 }
 
 .header {
