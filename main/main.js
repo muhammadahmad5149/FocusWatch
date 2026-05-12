@@ -3,7 +3,9 @@ const path = require('path');
 const { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, nativeImage } = require('electron');
 const { Scheduler } = require('../service/scheduler');
 const { hasAdminPassword, setAdminPassword, verifyAdminPassword } = require('../utils/auth');
-const { installWindowsService } = require('../utils/serviceInstaller');
+const { isWindowsProcessElevated } = require('../utils/elevatedWrite');
+const { pathExists } = require('../utils/fileSystem');
+const { installWindowsService, repairWindowsDataPermissions } = require('../utils/serviceInstaller');
 const { logEvent } = require('../utils/logger');
 const { getActivityLogPath, getProjectRoot, getScreenshotRoot } = require('../utils/paths');
 const { getServiceStatus } = require('../utils/serviceManager');
@@ -12,7 +14,13 @@ const { loadSettings, saveSettings } = require('../utils/settings');
 let mainWindow;
 let tray;
 let isQuitting = false;
-const userSessionScheduler = new Scheduler();
+const userSessionScheduler = new Scheduler({
+  captureScreenshots: true,
+  uploadEmails: !(process.platform === 'win32' && app.isPackaged),
+  startupMessage: process.platform === 'win32' && app.isPackaged ? null : 'ScreenGuardian user-session scheduler started',
+  stopMessage: process.platform === 'win32' && app.isPackaged ? null : 'ScreenGuardian user-session scheduler stopped',
+  errorMessage: 'User-session scheduler cycle failed'
+});
 let adminUnlocked = false;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -79,6 +87,30 @@ function configureLoginStartup() {
       };
 
   app.setLoginItemSettings(loginSettings);
+}
+
+function shouldUseWindowsServiceMode() {
+  return process.platform === 'win32' && app.isPackaged;
+}
+
+async function ensureWindowsServiceReady() {
+  if (!shouldUseWindowsServiceMode()) {
+    return;
+  }
+
+  if (!(await isWindowsProcessElevated())) {
+    return;
+  }
+
+  await repairWindowsDataPermissions();
+
+  const status = await getServiceStatus();
+
+  if (status.status === 'Running') {
+    return;
+  }
+
+  await installWindowsService();
 }
 
 function updateTrayMenu() {
@@ -201,8 +233,17 @@ ipcMain.handle('service:status', async () => {
 
 ipcMain.handle('folders:open-screenshots', async () => {
   assertAdminUnlocked();
-  await fs.mkdir(getScreenshotRoot(), { recursive: true });
-  await shell.openPath(getScreenshotRoot());
+  const screenshotRoot = getScreenshotRoot();
+
+  if (!(await pathExists(screenshotRoot))) {
+    throw new Error('No screenshots have been captured yet.');
+  }
+
+  const openError = await shell.openPath(screenshotRoot);
+
+  if (openError) {
+    throw new Error(openError);
+  }
 });
 
 ipcMain.handle('logs:read', async () => {
@@ -220,9 +261,17 @@ ipcMain.handle('logs:read', async () => {
 
 ipcMain.handle('logs:open', async () => {
   assertAdminUnlocked();
-  await fs.mkdir(path.dirname(getActivityLogPath()), { recursive: true });
-  await fs.appendFile(getActivityLogPath(), '', 'utf8');
-  await shell.openPath(getActivityLogPath());
+  const activityLogPath = getActivityLogPath();
+
+  if (!(await pathExists(activityLogPath))) {
+    throw new Error('No activity logs have been recorded yet.');
+  }
+
+  const openError = await shell.openPath(activityLogPath);
+
+  if (openError) {
+    throw new Error(openError);
+  }
 });
 
 app.whenReady().then(() => {
@@ -236,10 +285,10 @@ app.whenReady().then(() => {
     dialog.showWarningBox('ScreenGuardian', 'Tray icon could not be loaded.');
   }
 
-  installWindowsService().catch((error) => {
+  ensureWindowsServiceReady().catch((error) => {
     dialog.showWarningBox(
       'ScreenGuardian Service',
-      `Could not install ScreenGuardianService automatically. Run as Administrator and try again.\n\n${error.message}`
+      `Could not install or start ScreenGuardianService automatically.\n\n${error.message}`
     );
   });
 

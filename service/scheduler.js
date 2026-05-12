@@ -16,9 +16,14 @@ function getRandomDelayMs(settings) {
 }
 
 class Scheduler {
-  constructor() {
+  constructor(options = {}) {
     this.timer = null;
     this.stopped = true;
+    this.captureScreenshots = options.captureScreenshots !== false;
+    this.uploadEmails = options.uploadEmails !== false;
+    this.startupMessage = options.startupMessage === undefined ? 'ScreenGuardian service started' : options.startupMessage;
+    this.stopMessage = options.stopMessage === undefined ? 'ScreenGuardian service stopped' : options.stopMessage;
+    this.errorMessage = options.errorMessage || 'Scheduler cycle failed';
   }
 
   async start() {
@@ -27,7 +32,10 @@ class Scheduler {
     }
 
     this.stopped = false;
-    await logEvent('ScreenGuardian service started');
+    if (this.startupMessage) {
+      await logEvent(this.startupMessage);
+    }
+
     this.scheduleNext(0);
   }
 
@@ -39,7 +47,9 @@ class Scheduler {
       this.timer = null;
     }
 
-    await logEvent('ScreenGuardian service stopped');
+    if (this.stopMessage) {
+      await logEvent(this.stopMessage);
+    }
   }
 
   scheduleNext(delayMs) {
@@ -49,7 +59,7 @@ class Scheduler {
 
     this.timer = setTimeout(() => {
       this.runCycle().catch((error) => {
-        logEvent('Scheduler cycle failed', {
+        logEvent(this.errorMessage, {
           error: error.message,
           stack: error.stack
         }).catch(() => {});
@@ -59,8 +69,14 @@ class Scheduler {
 
   async runCycle() {
     const settings = await loadSettings();
-    await captureScreenshot();
-    await this.tryEmailUpload(settings);
+
+    if (this.captureScreenshots) {
+      await captureScreenshot();
+    }
+
+    if (this.uploadEmails) {
+      await this.tryEmailUpload(settings);
+    }
 
     this.scheduleNext(getRandomDelayMs(settings));
   }

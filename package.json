@@ -1,6 +1,6 @@
 {
   "name": "screenguardian",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Windows parental control screenshot monitor with Electron admin dashboard.",
   "main": "main/bootstrap.js",
   "private": true,
@@ -9,7 +9,7 @@
     "service": "node service/index.js",
     "install-service": "node scripts/install-service.js",
     "uninstall-service": "node scripts/uninstall-service.js",
-    "check": "node --check main/bootstrap.js && node --check main/main.js && node --check main/preload.js && node --check service/index.js && node --check service/scheduler.js && node --check service/screenshotEngine.js && node --check service/sentStore.js && node --check email/mailer.js && node --check utils/auth.js && node --check utils/env.js && node --check utils/fileSystem.js && node --check utils/internet.js && node --check utils/logger.js && node --check utils/paths.js && node --check utils/permissions.js && node --check utils/serviceInstaller.js && node --check utils/serviceManager.js && node --check utils/settings.js && node --check ui/renderer.js && node --check scripts/install-service.js && node --check scripts/uninstall-service.js",
+    "check": "node --check main/bootstrap.js && node --check main/main.js && node --check main/preload.js && node --check service/index.js && node --check service/scheduler.js && node --check service/screenshotEngine.js && node --check service/sentStore.js && node --check email/mailer.js && node --check utils/auth.js && node --check utils/elevatedWrite.js && node --check utils/env.js && node --check utils/fileSystem.js && node --check utils/internet.js && node --check utils/logger.js && node --check utils/paths.js && node --check utils/permissions.js && node --check utils/serviceInstaller.js && node --check utils/serviceManager.js && node --check utils/settings.js && node --check ui/renderer.js && node --check scripts/install-service.js && node --check scripts/uninstall-service.js",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win nsis"
   },

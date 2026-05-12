@@ -1,7 +1,13 @@
 const { Scheduler } = require('./scheduler');
 const { logEvent } = require('../utils/logger');
 
-const scheduler = new Scheduler();
+const scheduler = new Scheduler({
+  captureScreenshots: process.platform !== 'win32',
+  uploadEmails: true,
+  startupMessage: 'ScreenGuardian service started',
+  stopMessage: 'ScreenGuardian service stopped',
+  errorMessage: 'ScreenGuardian service cycle failed'
+});
 
 async function shutdown(signal) {
   await logEvent('Shutdown signal received', { signal });

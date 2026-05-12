@@ -23,8 +23,13 @@ function getNumberEnv(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function isDevelopmentMode() {
+  return Boolean(process.defaultApp) || getBooleanEnv('SCREEN_GUARDIAN_DEV_MODE', false);
+}
+
 module.exports = {
   getBooleanEnv,
   getEnv,
-  getNumberEnv
+  getNumberEnv,
+  isDevelopmentMode
 };

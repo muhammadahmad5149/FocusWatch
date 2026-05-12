@@ -1,10 +1,24 @@
 const { execFile } = require('child_process');
 const fs = require('fs/promises');
 const path = require('path');
-const { ensureDir } = require('./fileSystem');
+const { ensureDir, pathExists } = require('./fileSystem');
 const { logEvent } = require('./logger');
-const { protectWindowsDataDirectory } = require('./permissions');
-const { getDataRoot, getLogsRoot, getProjectRoot } = require('./paths');
+const {
+  grantWindowsCaptureWriteAccess,
+  grantWindowsFileReadOnlyAccess,
+  grantWindowsReadOnlyAccess,
+  grantWindowsRootTraverseAccess,
+  protectWindowsDataDirectory
+} = require('./permissions');
+const {
+  getActivityLogPath,
+  getDataRoot,
+  getLogsRoot,
+  getProjectRoot,
+  getScreenshotRoot,
+  getSettingsPath
+} = require('./paths');
+const { saveSettings, defaultSettings } = require('./settings');
 const { SERVICE_NAME } = require('./serviceManager');
 
 function run(command, args) {
@@ -52,6 +66,39 @@ async function removeExistingService() {
   await run('sc.exe', ['delete', SERVICE_NAME]);
 }
 
+async function repairWindowsDataPermissions() {
+  if (process.platform !== 'win32') {
+    return { updated: false, reason: 'Not Windows' };
+  }
+
+  const dataRoot = getDataRoot();
+  const logsRoot = getLogsRoot();
+  const screenshotRoot = getScreenshotRoot();
+  const settingsPath = getSettingsPath();
+  const activityLogPath = getActivityLogPath();
+
+  await ensureDir(dataRoot);
+  await ensureDir(logsRoot);
+  await ensureDir(screenshotRoot);
+
+  if (!(await pathExists(settingsPath))) {
+    await saveSettings(defaultSettings);
+  }
+
+  await protectWindowsDataDirectory(dataRoot);
+  await grantWindowsRootTraverseAccess(dataRoot);
+  await grantWindowsFileReadOnlyAccess(settingsPath);
+  await grantWindowsReadOnlyAccess(logsRoot);
+  await grantWindowsReadOnlyAccess(screenshotRoot);
+  await grantWindowsCaptureWriteAccess(screenshotRoot);
+
+  if (await pathExists(activityLogPath)) {
+    await grantWindowsFileReadOnlyAccess(activityLogPath);
+  }
+
+  return { updated: true };
+}
+
 async function installWindowsService() {
   if (process.platform !== 'win32') {
     return { installed: false, reason: 'Not Windows' };
@@ -61,10 +108,10 @@ async function installWindowsService() {
   const serviceExe = path.join(serviceRoot, `${SERVICE_NAME}.exe`);
   const serviceXml = path.join(serviceRoot, `${SERVICE_NAME}.xml`);
   const winswSource = path.join(getProjectRoot(), 'node_modules', 'node-windows', 'bin', 'winsw', 'winsw.exe');
+  const logsRoot = getLogsRoot();
 
   await ensureDir(serviceRoot);
-  await ensureDir(getLogsRoot());
-  await protectWindowsDataDirectory(getDataRoot());
+  await repairWindowsDataPermissions();
   await fs.copyFile(winswSource, serviceExe);
 
   const serviceArguments = process.versions.electron
@@ -80,7 +127,7 @@ async function installWindowsService() {
   <arguments>${escapeXml(serviceArguments)}</arguments>
   <workingdirectory>${escapeXml(getProjectRoot())}</workingdirectory>
   <startmode>Automatic</startmode>
-  <logpath>${escapeXml(getLogsRoot())}</logpath>
+  <logpath>${escapeXml(logsRoot)}</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10485760</sizeThreshold>
     <keepFiles>8</keepFiles>
@@ -110,5 +157,6 @@ async function installWindowsService() {
 }
 
 module.exports = {
-  installWindowsService
+  installWindowsService,
+  repairWindowsDataPermissions
 };

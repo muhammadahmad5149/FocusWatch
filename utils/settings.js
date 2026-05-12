@@ -1,4 +1,6 @@
 const fs = require('fs/promises');
+const { writeFileWithElevation, isPermissionError } = require('./elevatedWrite');
+const { grantWindowsFileReadOnlyAccess } = require('./permissions');
 const { getBooleanEnv, getEnv, getNumberEnv } = require('./env');
 const { ensureDir, pathExists } = require('./fileSystem');
 const { getDataRoot, getSettingsPath } = require('./paths');
@@ -56,10 +58,15 @@ function mergeSettings(savedSettings = {}) {
 }
 
 async function loadSettings() {
-  await ensureDir(getDataRoot());
+  try {
+    await ensureDir(getDataRoot());
+  } catch (error) {
+    if (!(process.platform === 'win32' && isPermissionError(error))) {
+      throw error;
+    }
+  }
 
   if (!(await pathExists(getSettingsPath()))) {
-    await saveSettings(defaultSettings);
     return mergeSettings();
   }
 
@@ -68,9 +75,10 @@ async function loadSettings() {
 }
 
 async function saveSettings(settings) {
-  await ensureDir(getDataRoot());
   const merged = mergeSettings(settings);
-  await fs.writeFile(getSettingsPath(), JSON.stringify(merged, null, 2), 'utf8');
+  const settingsPath = getSettingsPath();
+  await writeFileWithElevation(settingsPath, JSON.stringify(merged, null, 2), 'utf8');
+  await grantWindowsFileReadOnlyAccess(settingsPath);
   return merged;
 }
 

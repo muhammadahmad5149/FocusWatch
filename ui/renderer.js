@@ -33,6 +33,11 @@ const fields = {
 let currentSettings;
 let passwordConfigured = false;
 
+function getErrorMessage(error) {
+  const raw = error && error.message ? error.message : String(error || '');
+  return raw.replace(/^Error invoking remote method '[^']+': Error:\s*/i, '');
+}
+
 function setStatusText(message, type = 'unknown') {
   fields.serviceStatus.textContent = message;
   fields.serviceStatus.className = `status status-${type}`;
@@ -125,7 +130,10 @@ async function handleAdminUnlock() {
   const password = fields.adminLoginPassword.value;
 
   try {
-    if (passwordConfigured) {
+    const latestState = await window.screenGuardian.getAdminState();
+    configureLoginPanel(latestState);
+
+    if (latestState.passwordConfigured) {
       const result = await window.screenGuardian.adminLogin(password);
 
       if (!result.ok) {
@@ -146,7 +154,7 @@ async function handleAdminUnlock() {
     passwordConfigured = true;
     await loadProtectedState();
   } catch (error) {
-    showAdminLoginMessage(error.message);
+    showAdminLoginMessage(getErrorMessage(error));
   }
 }
 
@@ -162,16 +170,16 @@ async function loadInitialState() {
 }
 
 fields.refreshStatus.addEventListener('click', () => {
-  refreshStatus().catch((error) => showMessage(error.message));
+  refreshStatus().catch((error) => showMessage(getErrorMessage(error)));
 });
 
 fields.adminLoginButton.addEventListener('click', () => {
-  handleAdminUnlock().catch((error) => showAdminLoginMessage(error.message));
+  handleAdminUnlock().catch((error) => showAdminLoginMessage(getErrorMessage(error)));
 });
 
 fields.adminLoginPassword.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
-    handleAdminUnlock().catch((error) => showAdminLoginMessage(error.message));
+    handleAdminUnlock().catch((error) => showAdminLoginMessage(getErrorMessage(error)));
   }
 });
 
@@ -180,7 +188,7 @@ fields.saveSettings.addEventListener('click', async () => {
     currentSettings = await window.screenGuardian.saveSettings(collectSettings());
     showMessage('Email settings saved.');
   } catch (error) {
-    showMessage(`Failed to save settings: ${error.message}`);
+    showMessage(`Failed to save settings: ${getErrorMessage(error)}`);
   }
 });
 
@@ -191,16 +199,16 @@ fields.setAdminPassword.addEventListener('click', async () => {
     fields.passwordState.textContent = 'Admin password is configured.';
     showMessage('Admin password saved.');
   } catch (error) {
-    showMessage(`Failed to set password: ${error.message}`);
+    showMessage(`Failed to set password: ${getErrorMessage(error)}`);
   }
 });
 
 fields.openScreenshots.addEventListener('click', () => {
-  window.screenGuardian.openScreenshotFolder().catch((error) => showMessage(error.message));
+  window.screenGuardian.openScreenshotFolder().catch((error) => showMessage(getErrorMessage(error)));
 });
 
 fields.openLogs.addEventListener('click', () => {
-  window.screenGuardian.openLogs().catch((error) => showMessage(error.message));
+  window.screenGuardian.openLogs().catch((error) => showMessage(getErrorMessage(error)));
 });
 
 fields.viewLogs.addEventListener('click', async () => {
@@ -208,7 +216,7 @@ fields.viewLogs.addEventListener('click', async () => {
     const logs = await window.screenGuardian.readLogs();
     fields.logOutput.textContent = logs || 'No activity has been logged yet.';
   } catch (error) {
-    showMessage(`Failed to read logs: ${error.message}`);
+    showMessage(`Failed to read logs: ${getErrorMessage(error)}`);
   }
 });
 
@@ -237,4 +245,4 @@ window.screenGuardian.onRequestAdminExit(() => {
   fields.exitDialog.showModal();
 });
 
-loadInitialState().catch((error) => showMessage(error.message));
+loadInitialState().catch((error) => showMessage(getErrorMessage(error)));

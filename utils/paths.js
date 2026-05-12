@@ -1,6 +1,7 @@
 const os = require('os');
 const path = require('path');
 require('./env');
+const { isDevelopmentMode } = require('./env');
 
 const APP_NAME = 'ScreenGuardian';
 
@@ -14,6 +15,10 @@ function getDataRoot() {
   }
 
   if (process.platform === 'win32') {
+    if (isDevelopmentMode()) {
+      return path.join(getProjectRoot(), '.data');
+    }
+
     return path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', APP_NAME);
   }
 
